@@ -18,42 +18,70 @@ end
 
 # Patch module for AMA Extensions support
 module AmaAuthrequestPatch
-  # We override create_xml_doc to modify the XML before it is signed or encoded
   def create_xml_doc(settings, params = {})
     doc = super(settings, params)
-    
-    if Thread.current[:ama_saml_patch_enabled]
-      require "rexml/document"
-      
-      fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-      root = doc.root
-      
-      # Find or create Extensions
-      extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
-      
-      # Ensure Extensions is correctly positioned (after Issuer)
-      if root.elements["saml:Issuer"] && extensions.parent == root
-        issuer = root.elements["saml:Issuer"]
-        root.delete_element(extensions)
-        root.insert_after(issuer, extensions)
-      end
+    return doc unless Thread.current[:ama_saml_patch_enabled]
 
-      # Add FAAALevel
-      level = Thread.current[:ama_faaalevel] || "3"
-      extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
-      
-      # Add RequestedAttributes
-      req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-      (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
-        next if attr_name.empty?
-        req_attrs.add_element("fa:RequestedAttribute", {
-          "Name" => attr_name,
-          "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-          "isRequired" => "False"
-        })
+    require "rexml/document"
+
+    fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+    root = doc.root
+
+    signature = root.elements["ds:Signature"]
+    extensions = root.elements["samlp:Extensions"]
+
+    unless extensions
+      extensions = REXML::Element.new("samlp:Extensions")
+
+      if signature
+        signature.next_sibling = extensions
+      else
+        issuer = root.elements["saml:Issuer"]
+        if issuer
+          issuer.next_sibling = extensions
+        else
+          root.add_element(extensions)
+        end
       end
     end
-    
+
+    faaalevel = extensions.elements["fa:FAAALevel"]
+    unless faaalevel
+      faaalevel = extensions.add_element(
+        "fa:FAAALevel",
+        { "xmlns:fa" => fa_ns }
+      )
+    end
+    faaalevel.text = (Thread.current[:ama_faaalevel] || "3").to_s
+
+    req_attrs = extensions.elements["fa:RequestedAttributes"]
+    unless req_attrs
+      req_attrs = extensions.add_element(
+        "fa:RequestedAttributes",
+        { "xmlns:fa" => fa_ns }
+      )
+    end
+
+    existing_names =
+      req_attrs.get_elements("fa:RequestedAttribute").map { |el| el.attributes["Name"] }
+
+    (Thread.current[:ama_requested_attributes] || "")
+      .split("|")
+      .map(&:strip)
+      .reject(&:empty?)
+      .each do |attr_name|
+        next if existing_names.include?(attr_name)
+
+        req_attrs.add_element(
+          "fa:RequestedAttribute",
+          {
+            "Name" => attr_name,
+            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+            "isRequired" => "False",
+          }
+        )
+      end
+
     doc
   end
 end
