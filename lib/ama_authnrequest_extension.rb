@@ -79,4 +79,3 @@ module DiscourseSaml
   end
 end
 
-OneLogin::RubySaml::Authrequest.prepend(DiscourseSaml::AmaAuthnrequestExtension)

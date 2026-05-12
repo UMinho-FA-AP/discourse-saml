@@ -104,6 +104,12 @@ after_initialize do
     flash[:error] = I18n.t("login.use_saml_auth")
     render("failure")
   end
+
+  # Apply the AMA patch to ensure it is active after Discourse boots
+  if !OneLogin::RubySaml::Authrequest.ancestors.include?(DiscourseSaml::AmaAuthnrequestExtension)
+    OneLogin::RubySaml::Authrequest.prepend(DiscourseSaml::AmaAuthnrequestExtension)
+    puts "AMA: Extension successfully prepended to Authrequest"
+  end
 end
 
 require_relative "lib/ama_authnrequest_extension"
