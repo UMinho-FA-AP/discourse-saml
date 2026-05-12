@@ -105,51 +105,10 @@ after_initialize do
     render("failure")
   end
 
-  # Aggressive patch to ensure AMA extensions are active
-  ::OneLogin::RubySaml::Authrequest.class_eval do
-    unless method_defined?(:create_xml_doc_with_ama)
-      alias_method :create_xml_doc_without_ama, :create_xml_doc
-      
-      def create_xml_doc(settings, params = {})
-        ama_enabled = ::DiscourseSaml.setting(:ama_enabled)
-        msg = "AMA: create_xml_doc intercepted! (Enabled: #{ama_enabled})"
-        puts msg
-        Rails.logger.error(msg) if defined?(Rails) && Rails.logger
-        
-        doc = create_xml_doc_without_ama(settings, params)
-        return doc unless ama_enabled
-
-        # The logic from DiscourseSaml::AmaAuthnrequestExtension
-        # (Copied here for direct injection)
-        fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-        root = doc.root
-        extensions = root.elements["samlp:Extensions"]
-        unless extensions
-          following = root.elements["samlp:Subject"] || root.elements["samlp:NameIDPolicy"] || root.elements["samlp:Conditions"]
-          if following
-            extensions = REXML::Element.new("samlp:Extensions")
-            root.insert_before(following, extensions)
-          else
-            extensions = root.add_element("samlp:Extensions")
-          end
-        end
-
-        level = ::DiscourseSaml.setting(:ama_faaalevel) || "3"
-        extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
-        
-        req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-        (::DiscourseSaml.setting(:ama_requested_attributes) || "").split("|").map(&:strip).each do |attr_name|
-          next if attr_name.empty?
-          req_attrs.add_element("fa:RequestedAttribute", {
-            "Name" => attr_name,
-            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-            "isRequired" => "False"
-          })
-        end
-        doc
-      end
-      alias_method :create_xml_doc_with_ama, :create_xml_doc
-    end
+  # Apply the AMA patch using prepend (safest for private methods)
+  if !OneLogin::RubySaml::Authrequest.ancestors.include?(DiscourseSaml::AmaAuthnrequestExtension)
+    OneLogin::RubySaml::Authrequest.prepend(DiscourseSaml::AmaAuthnrequestExtension)
+    puts "AMA: Extension successfully prepended to Authrequest"
   end
 end
 

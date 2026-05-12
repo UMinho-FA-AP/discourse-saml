@@ -53,7 +53,7 @@ class SamlAuthenticator < ::Auth::ManagedAuthenticator
   end
 
   def register_middleware(omniauth)
-    omniauth.provider ::DiscourseSaml::SamlOmniauthStrategy,
+    omniauth.provider DiscourseSaml::SamlOmniauthStrategy,
                       name: name,
                       setup: lambda { |env| setup_strategy(env["omniauth.strategy"]) }
   end

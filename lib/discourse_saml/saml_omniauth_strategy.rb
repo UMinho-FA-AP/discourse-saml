@@ -3,12 +3,19 @@
 class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
   option :request_method, "GET"
 
-  def request_phase
-    if options[:request_method] == "POST"
-      puts 'AMA: SAML Strategy request phase...'
-      with_settings do |settings|
-        settings.compress_request = false # Compression used by default for Redirect binding, not POST
-        authn_request = OneLogin::RubySaml::Authrequest.new
+      def request_phase
+        puts "AMA: SAML Strategy request_phase started. Method: #{options[:request_method]}"
+        
+        with_settings do |settings|
+          authn_request = OneLogin::RubySaml::Authrequest.new
+          
+          # Direct injection of AMA extensions
+          if ::DiscourseSaml.setting(:ama_enabled)
+             puts "AMA: Injecting extensions into AuthnRequest instance"
+             authn_request.extend(DiscourseSaml::AmaAuthnrequestExtension)
+          end
+
+          if options[:request_method] == "POST"
         params = authn_request.create_params(settings, additional_params_for_authn_request)
         destination = settings.idp_sso_service_url
         render_auto_submitted_form(destination: destination, params: params)
