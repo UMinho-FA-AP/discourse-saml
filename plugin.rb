@@ -3,8 +3,8 @@
 # Discourse SAML Plugin for AMA (Autenticacao.gov)
 # Version: 1.1
 
+# 1. Global Patch (defined but only active via Thread-Local)
 after_initialize do
-  # By this point, all gems (including ruby-saml and omniauth-saml) are fully loaded
   require "onelogin/ruby-saml/authrequest"
   require "omniauth-saml"
 
@@ -15,7 +15,6 @@ after_initialize do
       def create_xml_doc(settings, params = {})
         doc = original_create_xml_doc(settings, params)
 
-        # Only apply AMA modifications if explicitly enabled for this thread
         if Thread.current[:ama_saml_patch_enabled]
           puts "AMA: Global create_xml_doc patch EXECUTING!"
           
@@ -23,7 +22,6 @@ after_initialize do
           root = doc.root
           extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
           
-          # Ensure correct order (after Issuer)
           if root.elements["saml:Issuer"] && extensions.parent == root
             issuer = root.elements["saml:Issuer"]
             root.delete_element(extensions)
@@ -43,50 +41,27 @@ after_initialize do
             })
           end
         end
-        
         doc
       end
     end
   end
 
-  module ::DiscourseSaml::SessionControllerExtensions
-    def login_error_check(user)
-      if ::DiscourseSaml.is_saml_forced_domain?(user.email)
-        return { error: I18n.t("login.use_saml_auth") }
-      end
-      super
-    end
-  end
-  ::SessionController.prepend(::DiscourseSaml::SessionControllerExtensions)
-
-  # "SAML Forced Domains" - Prevent login via other omniauth strategies
-  class ::DiscourseSaml::ForcedSamlError < StandardError
-  end
-  on(:after_auth) do |authenticator, result|
-    next if authenticator.name == "saml"
-    if [result.user&.email, result.email].any? { |e| ::DiscourseSaml.is_saml_forced_domain?(e) }
-      raise ::DiscourseSaml::ForcedSamlError
-    end
-  end
-  Users::OmniauthCallbacksController.rescue_from(::DiscourseSaml::ForcedSamlError) do
-    flash[:error] = I18n.t("login.use_saml_auth")
-    render("failure")
-  end
-  
-  puts "AMA: SamlAuthenticator initialized"
-
-  # Load libraries that depend on gems
+  # Load other components
   require_relative "lib/ama_authnrequest_extension"
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
   require_relative "lib/discourse_saml/saml_replay_cache"
-  require_relative "lib/saml_authenticator"
-
-  # Allow GlobalSettings to override the translations
-  name = GlobalSetting.try(:saml_title)
-  button_title = GlobalSetting.try(:saml_button_title) || GlobalSetting.try(:saml_title)
-
-  auth_provider icon_setting: :saml_icon,
-                title: button_title,
-                pretty_name: name,
-                authenticator: SamlAuthenticator.new
+  
+  puts "AMA: SamlAuthenticator components loaded"
 end
+
+# 2. Authenticator registration (Top Level)
+require_relative "lib/saml_authenticator"
+
+# Safe title resolution for the build phase
+title = GlobalSetting.try(:saml_title) || "SAML"
+button_title = GlobalSetting.try(:saml_button_title) || title
+
+auth_provider icon_setting: :saml_icon,
+              title: button_title,
+              pretty_name: title,
+              authenticator: SamlAuthenticator.new
