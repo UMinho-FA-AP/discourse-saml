@@ -10,10 +10,14 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
       authn_request = OneLogin::RubySaml::Authrequest.new
 
       # Direct injection of AMA extensions
+      puts "AMA: Checking ama_enabled: #{::DiscourseSaml.setting(:ama_enabled)}"
       if ::DiscourseSaml.setting(:ama_enabled)
+        puts "AMA: authn_request class: #{authn_request.class}"
         original_method = authn_request.method(:create_xml_doc)
         authn_request.define_singleton_method(:create_xml_doc) do |settings, params|
-          puts "AMA: Singleton create_xml_doc called!"
+          msg = "AMA: Singleton create_xml_doc EXECUTING!"
+          puts msg
+          Rails.logger.warn(msg) if defined?(Rails)
           doc = original_method.call(settings, params)
           
           fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
