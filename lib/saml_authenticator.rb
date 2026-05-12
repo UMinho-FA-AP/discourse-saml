@@ -3,7 +3,7 @@
 class SamlAuthenticator < ::Auth::ManagedAuthenticator
   def initialize
     puts "AMA: SamlAuthenticator initialized"
-    super
+    super("saml")
   end
 
   def name
