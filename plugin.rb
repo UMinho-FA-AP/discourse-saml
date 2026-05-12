@@ -40,6 +40,7 @@ after_initialize do
       alias_method :original_create_xml_doc, :create_xml_doc
 
       def create_xml_doc(settings, params = {})
+        puts "AMA: create_xml_doc intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
         doc = original_create_xml_doc(settings, params)
         if Thread.current[:ama_saml_patch_enabled]
           puts "AMA: Global create_xml_doc patch EXECUTING!"

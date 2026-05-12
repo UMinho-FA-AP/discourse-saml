@@ -8,6 +8,7 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
 
     with_settings do |settings|
       authn_request = OneLogin::RubySaml::Authrequest.new
+      puts "AMA: Checking settings - ama_enabled: #{::DiscourseSaml.setting(:ama_enabled).inspect}"
 
       # Enable the AMA patch for this specific request thread
       if ::DiscourseSaml.setting(:ama_enabled)
