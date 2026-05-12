@@ -2,7 +2,7 @@
 
 # name: discourse-saml
 # about: SAML Auth Provider
-# version: 1.0
+# version: 1.1
 # author: Discourse Team
 # url: https://github.com/discourse/discourse-saml
 
