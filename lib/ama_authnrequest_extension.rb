@@ -17,6 +17,7 @@ module DiscourseSaml
     # extensions block, otherwise it rejects the request with a generic error.
     #
     # Namespace: http://autenticacao.cartaodecidadao.pt/atributos
+    private
     def create(settings, params = {})
       puts "AMA: Authrequest#create called!"
       super

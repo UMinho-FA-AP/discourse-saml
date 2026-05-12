@@ -11,8 +11,9 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
 
       # Direct injection of AMA extensions
       if ::DiscourseSaml.setting(:ama_enabled)
-        puts "AMA: Prepending extensions to AuthnRequest singleton class"
+        puts "AMA: Method owner before: #{authn_request.method(:create_xml_doc).owner}"
         authn_request.singleton_class.prepend(DiscourseSaml::AmaAuthnrequestExtension)
+        puts "AMA: Method owner after: #{authn_request.method(:create_xml_doc).owner}"
       end
 
       if options[:request_method] == "POST"
