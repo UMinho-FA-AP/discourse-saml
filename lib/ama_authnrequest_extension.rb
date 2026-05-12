@@ -41,16 +41,14 @@ module DiscourseSaml
         end
       end
 
-      # Add FAAALevel
-      # Level 3 is typically required for Chave Móvel Digital / Citizen Card authentication.
+      # Add FAAALevel with inline namespace to match your image
       level = ::DiscourseSaml.setting(:ama_faaalevel) || "3"
       unless extensions.elements["fa:FAAALevel"]
         faaa_level = extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns })
         faaa_level.text = level.to_s
       end
 
-      # Add RequestedAttributes
-      # These define which user attributes we are requesting from the AMA IdP.
+      # Add RequestedAttributes with inline namespace to match your image
       unless extensions.elements["fa:RequestedAttributes"]
         req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
         
