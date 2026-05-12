@@ -8,6 +8,14 @@
 gem "ruby-saml", "1.18.0"
 gem "omniauth-saml", "2.2.3"
 
+module ::DiscourseSaml
+  def self.setting(key)
+    SiteSetting.send("saml_#{key}")
+  rescue NoMethodError
+    GlobalSetting.try("saml_#{key}")
+  end
+end
+
 # Diagnostic patch to find out what is nil during activation
 class Plugin::Instance
   unless method_defined?(:original_activate!)
