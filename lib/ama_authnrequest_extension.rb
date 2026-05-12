@@ -3,7 +3,7 @@
 require "onelogin/ruby-saml/authrequest"
 
 # Diagnostic log to confirm the file is being loaded during Discourse startup
-Rails.logger.warn("AMA: Patch file lib/ama_authnrequest_extension.rb is being loaded!")
+Rails.logger.warn("AMA: Patch file lib/ama_authnrequest_extension.rb is being loaded!") if defined?(Rails) && Rails.logger
 
 module DiscourseSaml
   module AmaAuthnrequestExtension
@@ -16,7 +16,9 @@ module DiscourseSaml
     # Namespace: http://autenticacao.cartaodecidadao.pt/atributos
     def create_xml_doc(settings, params = {})
       # Diagnostic log to confirm the method is being intercepted
-      Rails.logger.warn("AMA: create_xml_doc called! AMA Enabled: #{::DiscourseSaml.setting(:ama_enabled)}")
+      if defined?(Rails) && Rails.logger
+        Rails.logger.warn("AMA: create_xml_doc called! AMA Enabled: #{::DiscourseSaml.setting(:ama_enabled)}")
+      end
 
       doc = super
 
