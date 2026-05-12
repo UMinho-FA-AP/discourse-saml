@@ -1,10 +1,14 @@
-# Diagnostic patch to find out what is nil
+# Diagnostic patch to find out what is nil during activation
 class Plugin::Instance
-  unless method_defined?(:original_auth_provider)
-    alias_method :original_auth_provider, :auth_provider
-    def auth_provider(opts)
-      puts "AMA: auth_provider debug: #{opts.inspect}"
-      original_auth_provider(opts)
+  unless method_defined?(:original_activate!)
+    alias_method :original_activate!, :activate!
+    def activate!
+      puts "AMA: activate! starting. Providers: #{@auth_providers.inspect}"
+      original_activate!
+    rescue => e
+      puts "AMA: CRASH in activate!: #{e.message}"
+      puts "AMA: Backtrace: #{e.backtrace.first(10).join("\n")}"
+      raise e
     end
   end
 end
