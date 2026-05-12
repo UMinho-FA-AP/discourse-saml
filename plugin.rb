@@ -16,81 +16,81 @@ module ::DiscourseSaml
   end
 end
 
-# Patch module for AMA Extensions support
+# Utility module for AMA XML injection logic
+module AmaXmlExtension
+  def self.apply!(doc)
+    return unless Thread.current[:ama_saml_patch_enabled]
+    
+    require "rexml/document"
+    fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+    root = doc.root
+    
+    # Don't apply twice if already present with our level
+    return if root.elements["samlp:Extensions"] && root.elements["samlp:Extensions"].elements["fa:FAAALevel"]
+
+    # 1. Ensure Extensions exist
+    extensions = root.elements["samlp:Extensions"] || REXML::Element.new("samlp:Extensions")
+    
+    # 2. Position correctly: Standard order is Issuer, Signature, Extensions
+    signature = root.elements["ds:Signature"]
+    issuer = root.elements["saml:Issuer"]
+    
+    if signature
+      # If signature exists, put extensions AFTER it as per AMA example
+      root.insert_after(signature, extensions)
+    elsif issuer
+      # Otherwise put after issuer
+      root.insert_after(issuer, extensions)
+    else
+      # Fallback to end of root
+      root.add_element(extensions) unless extensions.parent
+    end
+
+    # 3. Add/Update FAAALevel
+    faaalevel = extensions.elements["fa:FAAALevel"] || extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns })
+    faaalevel.text = (Thread.current[:ama_faaalevel] || "3").to_s
+    
+    # 4. Add/Update RequestedAttributes
+    req_attrs = extensions.elements["fa:RequestedAttributes"] || extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+    
+    existing_names = req_attrs.get_elements("fa:RequestedAttribute").map { |el| el.attributes["Name"] }
+    (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).reject(&:empty?).each do |attr_name|
+      next if existing_names.include?(attr_name)
+      req_attrs.add_element("fa:RequestedAttribute", {
+        "Name" => attr_name,
+        "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+        "isRequired" => "False"
+      })
+    end
+  end
+end
+
+# Patch 1: The Signing Utility
+# This ensures extensions are added BEFORE the XML is signed
+module AmaSignPatch
+  def add_sign(doc, *args)
+    AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
+    super(doc, *args)
+  end
+end
+
+# Patch 2: The Authrequest Class
+# This ensures extensions are added even if the request is NOT signed
 module AmaAuthrequestPatch
   def create_xml_doc(settings, params = {})
     doc = super(settings, params)
-    return doc unless Thread.current[:ama_saml_patch_enabled]
-
-    require "rexml/document"
-
-    fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-    root = doc.root
-
-    signature = root.elements["ds:Signature"]
-    extensions = root.elements["samlp:Extensions"]
-
-    unless extensions
-      extensions = REXML::Element.new("samlp:Extensions")
-
-      if signature
-        signature.next_sibling = extensions
-      else
-        issuer = root.elements["saml:Issuer"]
-        if issuer
-          issuer.next_sibling = extensions
-        else
-          root.add_element(extensions)
-        end
-      end
-    end
-
-    faaalevel = extensions.elements["fa:FAAALevel"]
-    unless faaalevel
-      faaalevel = extensions.add_element(
-        "fa:FAAALevel",
-        { "xmlns:fa" => fa_ns }
-      )
-    end
-    faaalevel.text = (Thread.current[:ama_faaalevel] || "3").to_s
-
-    req_attrs = extensions.elements["fa:RequestedAttributes"]
-    unless req_attrs
-      req_attrs = extensions.add_element(
-        "fa:RequestedAttributes",
-        { "xmlns:fa" => fa_ns }
-      )
-    end
-
-    existing_names =
-      req_attrs.get_elements("fa:RequestedAttribute").map { |el| el.attributes["Name"] }
-
-    (Thread.current[:ama_requested_attributes] || "")
-      .split("|")
-      .map(&:strip)
-      .reject(&:empty?)
-      .each do |attr_name|
-        next if existing_names.include?(attr_name)
-
-        req_attrs.add_element(
-          "fa:RequestedAttribute",
-          {
-            "Name" => attr_name,
-            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-            "isRequired" => "False",
-          }
-        )
-      end
-
+    AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
     doc
   end
 end
 
 after_initialize do
   require "onelogin/ruby-saml/authrequest"
+  require "onelogin/ruby-saml/utils"
   require "omniauth-saml"
 
-  # Prepend the patch to the Authrequest class
+  # Apply both patches to ensure extensions are added correctly in all flows
+  OneLogin::RubySaml::Utils.singleton_class.prepend(AmaSignPatch)
   OneLogin::RubySaml::Authrequest.prepend(AmaAuthrequestPatch)
 
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
