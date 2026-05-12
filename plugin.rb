@@ -106,6 +106,7 @@ after_initialize do
   end
 end
 
+require_relative "lib/ama_authnrequest_extension"
 require_relative "lib/discourse_saml/saml_omniauth_strategy"
 require_relative "lib/discourse_saml/saml_replay_cache"
 require_relative "lib/saml_authenticator"

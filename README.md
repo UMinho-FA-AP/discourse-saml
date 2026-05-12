@@ -91,6 +91,16 @@ SiteSetting.saml_enabled = true
 
 Then remove the environment variables and restart the server. The plugin will now be using site settings which can be modified in the admin UI.
 
+### Autenticacao.gov (Portugal) Support
+
+This fork includes support for Portugal's `Autenticacao.gov` (AMA) SAML IdP. To enable it, you must configure the following settings:
+
+- `DISCOURSE_SAML_AMA_ENABLED`: Set to `true` to enable the injection of required `<samlp:Extensions>` in the `AuthnRequest`.
+- `DISCOURSE_SAML_AMA_FAAALEVEL`: The FAALevel to request. Defaults to `3`.
+- `DISCOURSE_SAML_AMA_REQUESTED_ATTRIBUTES`: A pipe-separated list of attribute URIs to request. Defaults to `http://interop.gov.pt/MDC/Cidadao/NIC|http://interop.gov.pt/MDC/Cidadao/NomeProprio`.
+
+These settings are required because the AMA IdP rejects standard SAML requests that do not include these specific extensions.
+
 ### License
 
 MIT
