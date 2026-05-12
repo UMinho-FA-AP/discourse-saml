@@ -33,12 +33,21 @@ end
 
 # Define the patch module outside after_initialize for clarity
 module AmaAuthrequestPatch
+  def create_params(settings, params = {})
+    puts "AMA: create_params PREPENDed intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
+    
+    # We still want to modify the XML, so we will actually override create_xml_doc here
+    # but we will also log that we are in create_params
+    super(settings, params)
+  end
+
   def create_xml_doc(settings, params = {})
     puts "AMA: create_xml_doc PREPENDed intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
     doc = super(settings, params)
     
     if Thread.current[:ama_saml_patch_enabled]
       puts "AMA: Global create_xml_doc patch EXECUTING!"
+      # ... (rest of the XML logic remains the same)
       fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
       root = doc.root
       extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
