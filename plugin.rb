@@ -44,9 +44,15 @@ module AmaAuthrequestPatch
       require "rexml/document"
       
       # 1. Decode and decompress the existing request
+      require "base64"
+      require "zlib"
+      
       puts "AMA: Decoding SAMLRequest..."
-      decoded = OneLogin::RubySaml::Utils.decode(result["SAMLRequest"])
-      inflated = OneLogin::RubySaml::Utils.inflate(decoded)
+      decoded = Base64.decode64(result["SAMLRequest"])
+      
+      puts "AMA: Inflating..."
+      # SAML uses raw DEFLATE (no zlib headers)
+      inflated = Zlib::Inflate.new(-Zlib::MAX_WBITS).inflate(decoded)
       
       puts "AMA: Parsing XML..."
       doc = REXML::Document.new(inflated)
@@ -79,9 +85,14 @@ module AmaAuthrequestPatch
       # 3. Re-encode and compress the modified XML
       new_xml = ""
       doc.write(new_xml)
-      puts "AMA: Re-encoding XML..."
-      deflated = OneLogin::RubySaml::Utils.deflate(new_xml)
-      result["SAMLRequest"] = OneLogin::RubySaml::Utils.encode(deflated)
+      
+      puts "AMA: Deflating..."
+      # Produce raw DEFLATE
+      deflated = Zlib::Deflate.new(nil, -Zlib::MAX_WBITS).deflate(new_xml, Zlib::FINISH)
+      
+      puts "AMA: Base64 encoding..."
+      result["SAMLRequest"] = Base64.strict_encode64(deflated)
+      
       puts "AMA: SAMLRequest successfully modified and re-encoded"
     end
     
