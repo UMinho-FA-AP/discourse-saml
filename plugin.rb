@@ -5,6 +5,9 @@
 # authors: Discourse, INOV
 # url: https://github.com/UMinho-FA-AP/discourse-saml
 
+gem "ruby-saml", "1.18.0"
+gem "omniauth-saml", "2.2.3"
+
 # Diagnostic patch to find out what is nil during activation
 class Plugin::Instance
   unless method_defined?(:original_activate!)
