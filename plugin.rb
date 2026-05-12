@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 # name: discourse-saml
-# about: SAML Auth Provider
+# about: SAML Auth Provider with Portugal Autenticacao.gov (AMA) support
 # version: 1.1
 # authors: Discourse, INOV
 # url: https://github.com/UMinho-FA-AP/discourse-saml
@@ -16,62 +16,33 @@ module ::DiscourseSaml
   end
 end
 
-# Diagnostic patch to find out what is nil during activation
-class Plugin::Instance
-  unless method_defined?(:original_activate!)
-    alias_method :original_activate!, :activate!
-    def activate!
-      puts "AMA: activate! starting. Providers: #{@auth_providers.inspect}"
-      original_activate!
-    rescue => e
-      puts "AMA: CRASH in activate!: #{e.message}"
-      puts "AMA: Backtrace: #{e.backtrace.first(10).join("\n")}"
-      raise e
-    end
-  end
-end
-
+# Patch module for AMA Extensions support
 module AmaAuthrequestPatch
-  def create_params(settings, params = {})
-    puts "AMA: create_params PREPENDed intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
+  # We override create_xml_doc to modify the XML before it is signed or encoded
+  def create_xml_doc(settings, params = {})
+    doc = super(settings, params)
     
-    # Let the library generate the base parameters (including the XML)
-    result = super(settings, params)
-    
-    if Thread.current[:ama_saml_patch_enabled] && result["SAMLRequest"]
-      puts "AMA: Injecting extensions into generated SAMLRequest"
-      
+    if Thread.current[:ama_saml_patch_enabled]
       require "rexml/document"
       
-      # 1. Decode and decompress the existing request
-      require "base64"
-      require "zlib"
-      
-      puts "AMA: Decoding SAMLRequest..."
-      decoded = Base64.decode64(result["SAMLRequest"])
-      
-      puts "AMA: Inflating..."
-      # SAML uses raw DEFLATE (no zlib headers)
-      inflated = Zlib::Inflate.new(-Zlib::MAX_WBITS).inflate(decoded)
-      
-      puts "AMA: Parsing XML..."
-      doc = REXML::Document.new(inflated)
-      
-      # 2. Apply AMA modifications to the XML DOM
-      puts "AMA: Modifying DOM..."
       fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
       root = doc.root
+      
+      # Find or create Extensions
       extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
       
+      # Ensure Extensions is correctly positioned (after Issuer)
       if root.elements["saml:Issuer"] && extensions.parent == root
         issuer = root.elements["saml:Issuer"]
         root.delete_element(extensions)
         root.insert_after(issuer, extensions)
       end
 
+      # Add FAAALevel
       level = Thread.current[:ama_faaalevel] || "3"
       extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
       
+      # Add RequestedAttributes
       req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
       (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
         next if attr_name.empty?
@@ -81,22 +52,9 @@ module AmaAuthrequestPatch
           "isRequired" => "False"
         })
       end
-
-      # 3. Re-encode and compress the modified XML
-      new_xml = String.new
-      doc.write(new_xml)
-      
-      puts "AMA: Deflating..."
-      # Produce raw DEFLATE
-      deflated = Zlib::Deflate.new(nil, -Zlib::MAX_WBITS).deflate(new_xml, Zlib::FINISH)
-      
-      puts "AMA: Base64 encoding..."
-      result["SAMLRequest"] = Base64.strict_encode64(deflated)
-      
-      puts "AMA: SAMLRequest successfully modified and re-encoded"
     end
     
-    result
+    doc
   end
 end
 
@@ -104,12 +62,11 @@ after_initialize do
   require "onelogin/ruby-saml/authrequest"
   require "omniauth-saml"
 
+  # Prepend the patch to the Authrequest class
   OneLogin::RubySaml::Authrequest.prepend(AmaAuthrequestPatch)
 
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
   require_relative "lib/saml_authenticator"
-  
-  puts "AMA: SamlAuthenticator components loaded"
 end
 
 require_relative "lib/saml_authenticator"

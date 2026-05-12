@@ -4,11 +4,8 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
   option :request_method, "GET"
 
   def request_phase
-    puts "AMA: SAML Strategy request_phase started. Method: #{options[:request_method]}"
-
     with_settings do |settings|
       authn_request = OneLogin::RubySaml::Authrequest.new
-      puts "AMA: Checking settings - ama_enabled: #{::DiscourseSaml.setting(:ama_enabled).inspect}"
 
       # Enable the AMA patch for this specific request thread
       if ::DiscourseSaml.setting(:ama_enabled)
