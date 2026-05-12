@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SamlAuthenticator < ::Auth::ManagedAuthenticator
+class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
   def initialize
     super
     @name = "saml"

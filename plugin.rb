@@ -65,4 +65,4 @@ auth_provider name: "saml",
               icon_setting: :saml_icon,
               title: button_title,
               pretty_name: title,
-              authenticator: SamlAuthenticator.new
+              authenticator: AmaSamlAuthenticator.new
