@@ -4,7 +4,10 @@
 # Version: 1.1
 
 after_initialize do
-  # By this point, all gems (including ruby-saml) are fully loaded
+  # By this point, all gems (including ruby-saml and omniauth-saml) are fully loaded
+  require "onelogin/ruby-saml/authrequest"
+  require "omniauth-saml"
+
   class OneLogin::RubySaml::Authrequest
     unless method_defined?(:original_create_xml_doc)
       alias_method :original_create_xml_doc, :create_xml_doc
@@ -71,18 +74,19 @@ after_initialize do
   end
   
   puts "AMA: SamlAuthenticator initialized"
+
+  # Load libraries that depend on gems
+  require_relative "lib/ama_authnrequest_extension"
+  require_relative "lib/discourse_saml/saml_omniauth_strategy"
+  require_relative "lib/discourse_saml/saml_replay_cache"
+  require_relative "lib/saml_authenticator"
+
+  # Allow GlobalSettings to override the translations
+  name = GlobalSetting.try(:saml_title)
+  button_title = GlobalSetting.try(:saml_button_title) || GlobalSetting.try(:saml_title)
+
+  auth_provider icon_setting: :saml_icon,
+                title: button_title,
+                pretty_name: name,
+                authenticator: SamlAuthenticator.new
 end
-
-require_relative "lib/ama_authnrequest_extension"
-require_relative "lib/discourse_saml/saml_omniauth_strategy"
-require_relative "lib/discourse_saml/saml_replay_cache"
-require_relative "lib/saml_authenticator"
-
-# Allow GlobalSettings to override the translations
-name = GlobalSetting.try(:saml_title)
-button_title = GlobalSetting.try(:saml_button_title) || GlobalSetting.try(:saml_title)
-
-auth_provider icon_setting: :saml_icon,
-              title: button_title,
-              pretty_name: name,
-              authenticator: SamlAuthenticator.new

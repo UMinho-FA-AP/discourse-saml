@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+require "omniauth-saml"
 
 class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
   option :request_method, "GET"
