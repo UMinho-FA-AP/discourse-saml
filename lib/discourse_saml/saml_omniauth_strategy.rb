@@ -11,9 +11,37 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
 
       # Direct injection of AMA extensions
       if ::DiscourseSaml.setting(:ama_enabled)
-        puts "AMA: Method owner before: #{authn_request.method(:create_xml_doc).owner}"
-        authn_request.singleton_class.prepend(DiscourseSaml::AmaAuthnrequestExtension)
-        puts "AMA: Method owner after: #{authn_request.method(:create_xml_doc).owner}"
+        original_method = authn_request.method(:create_xml_doc)
+        authn_request.define_singleton_method(:create_xml_doc) do |settings, params|
+          puts "AMA: Singleton create_xml_doc called!"
+          doc = original_method.call(settings, params)
+          
+          fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+          root = doc.root
+          extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
+          
+          # Ensure correct order (after Issuer)
+          if root.elements["saml:Issuer"] && extensions.parent == root
+            # Already in root, but let's make sure it's after Issuer
+            issuer = root.elements["saml:Issuer"]
+            root.delete_element(extensions)
+            root.insert_after(issuer, extensions)
+          end
+
+          level = ::DiscourseSaml.setting(:ama_faaalevel) || "3"
+          extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
+          
+          req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+          (::DiscourseSaml.setting(:ama_requested_attributes) || "").split("|").map(&:strip).each do |attr_name|
+            next if attr_name.empty?
+            req_attrs.add_element("fa:RequestedAttribute", {
+              "Name" => attr_name,
+              "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+              "isRequired" => "False"
+            })
+          end
+          doc
+        end
       end
 
       if options[:request_method] == "POST"
