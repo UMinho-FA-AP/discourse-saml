@@ -1,4 +1,13 @@
-# frozen_string_literal: true
+# Diagnostic patch to find out what is nil
+class Plugin::Instance
+  unless method_defined?(:original_auth_provider)
+    alias_method :original_auth_provider, :auth_provider
+    def auth_provider(opts)
+      puts "AMA: auth_provider debug: #{opts.inspect}"
+      original_auth_provider(opts)
+    end
+  end
+end
 
 # Discourse SAML Plugin for AMA (Autenticacao.gov)
 # Version: 1.1
