@@ -41,11 +41,18 @@ module AmaAuthrequestPatch
     if Thread.current[:ama_saml_patch_enabled] && result["SAMLRequest"]
       puts "AMA: Injecting extensions into generated SAMLRequest"
       
+      require "rexml/document"
+      
       # 1. Decode and decompress the existing request
-      inflated = OneLogin::RubySaml::Utils.decode_saml_request(result["SAMLRequest"])
+      puts "AMA: Decoding SAMLRequest..."
+      decoded = OneLogin::RubySaml::Utils.decode(result["SAMLRequest"])
+      inflated = OneLogin::RubySaml::Utils.inflate(decoded)
+      
+      puts "AMA: Parsing XML..."
       doc = REXML::Document.new(inflated)
       
       # 2. Apply AMA modifications to the XML DOM
+      puts "AMA: Modifying DOM..."
       fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
       root = doc.root
       extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
@@ -72,7 +79,9 @@ module AmaAuthrequestPatch
       # 3. Re-encode and compress the modified XML
       new_xml = ""
       doc.write(new_xml)
-      result["SAMLRequest"] = OneLogin::RubySaml::Utils.encode_saml_request(new_xml)
+      puts "AMA: Re-encoding XML..."
+      deflated = OneLogin::RubySaml::Utils.deflate(new_xml)
+      result["SAMLRequest"] = OneLogin::RubySaml::Utils.encode(deflated)
       puts "AMA: SAMLRequest successfully modified and re-encoded"
     end
     
