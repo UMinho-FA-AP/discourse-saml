@@ -1,86 +1,53 @@
 # frozen_string_literal: true
 
-# name: discourse-saml
-# about: SAML Auth Provider
-# version: 1.1
-# author: Discourse Team
-# url: https://github.com/discourse/discourse-saml
+# Discourse SAML Plugin for AMA (Autenticacao.gov)
+# Version: 1.1
 
-gem "macaddr", "1.0.0"
-gem "uuid", "2.3.7"
-gem "ruby-saml", "1.18.0"
+require "onelogin/ruby-saml/authrequest"
 
-if OmniAuth.const_defined?(:AuthenticityTokenProtection) # OmniAuth 2.0
-  gem "omniauth-saml", "2.2.3"
-else
-  gem "omniauth-saml", "1.10.5"
-end
+# Global patch with thread-local scoping for maximum reliability
+class OneLogin::RubySaml::Authrequest
+  unless method_defined?(:original_create_xml_doc)
+    alias_method :original_create_xml_doc, :create_xml_doc
 
-enabled_site_setting :saml_enabled if !GlobalSetting.try("saml_target_url")
+    def create_xml_doc(settings, params = {})
+      doc = original_create_xml_doc(settings, params)
 
-on(:before_session_destroy) do |data|
-  next if !DiscourseSaml.setting(:slo_target_url).present?
-  data[:redirect_url] = Discourse.base_path + "/auth/saml/spslo"
-end
+      # Only apply AMA modifications if explicitly enabled for this thread
+      if Thread.current[:ama_saml_patch_enabled]
+        puts "AMA: Global create_xml_doc patch EXECUTING!"
+        
+        fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+        root = doc.root
+        extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
+        
+        # Ensure correct order (after Issuer)
+        if root.elements["saml:Issuer"] && extensions.parent == root
+          issuer = root.elements["saml:Issuer"]
+          root.delete_element(extensions)
+          root.insert_after(issuer, extensions)
+        end
 
-module ::DiscourseSaml
-  def self.enabled?
-    # Legacy - we only check the enabled site setting
-    # if the environment-variables are **not** present
-    !!GlobalSetting.try("saml_target_url") || SiteSetting.saml_enabled
-  end
-
-  def self.setting(key, prefer_prefix: "saml_")
-    if prefer_prefix == "saml_"
-      SiteSetting.get("saml_#{key}")
-    else
-      GlobalSetting.try("#{prefer_prefix}#{key}") || SiteSetting.get("saml_#{key}")
+        level = Thread.current[:ama_faaalevel] || "3"
+        extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
+        
+        req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+        (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
+          next if attr_name.empty?
+          req_attrs.add_element("fa:RequestedAttribute", {
+            "Name" => attr_name,
+            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+            "isRequired" => "False"
+          })
+        end
+      end
+      
+      doc
     end
   end
-
-  def self.is_saml_forced_domain?(email)
-    return if !enabled?
-    return if !DiscourseSaml.setting(:forced_domains).present?
-    return if email.blank?
-
-    DiscourseSaml
-      .setting(:forced_domains)
-      .split(/[,|]/)
-      .each { |domain| return true if email.end_with?("@#{domain}") }
-
-    false
-  end
 end
-
-register_site_setting_area("saml")
-register_admin_config_login_route("saml")
 
 after_initialize do
-  if !!GlobalSetting.try("saml_target_url")
-    # Configured via environment variables. Hide all the site settings
-    # from the UI to avoid confusion
-    saml_site_setting_keys = []
-
-    SiteSetting.defaults.all.keys.each do |k|
-      next if !k.to_s.start_with?("saml_")
-      saml_site_setting_keys << k
-    end
-
-    if SiteSetting.respond_to?(:hidden_settings_provider)
-      register_modifier(:hidden_site_settings) { |hidden| hidden + saml_site_setting_keys }
-    else
-      SiteSetting.hidden_settings.concat(saml_site_setting_keys)
-    end
-  end
-
-  # "SAML Forced Domains" - Prevent login via email
-  on(:before_email_login) do |user|
-    if ::DiscourseSaml.is_saml_forced_domain?(user.email)
-      raise Discourse::InvalidAccess.new(nil, nil, custom_message: "login.use_saml_auth")
-    end
-  end
-
-  # "SAML Forced Domains" - Prevent login via regular username/password
   module ::DiscourseSaml::SessionControllerExtensions
     def login_error_check(user)
       if ::DiscourseSaml.is_saml_forced_domain?(user.email)
@@ -104,12 +71,8 @@ after_initialize do
     flash[:error] = I18n.t("login.use_saml_auth")
     render("failure")
   end
-
-  # Apply the AMA patch using prepend (safest for private methods)
-  if !OneLogin::RubySaml::Authrequest.ancestors.include?(DiscourseSaml::AmaAuthnrequestExtension)
-    OneLogin::RubySaml::Authrequest.prepend(DiscourseSaml::AmaAuthnrequestExtension)
-    puts "AMA: Extension successfully prepended to Authrequest"
-  end
+  
+  puts "AMA: SamlAuthenticator initialized"
 end
 
 require_relative "lib/ama_authnrequest_extension"
@@ -118,7 +81,6 @@ require_relative "lib/discourse_saml/saml_replay_cache"
 require_relative "lib/saml_authenticator"
 
 # Allow GlobalSettings to override the translations
-# If the global settings are not provided, will use the `js.login.saml.name` and `js.login.saml.title` translations
 name = GlobalSetting.try(:saml_title)
 button_title = GlobalSetting.try(:saml_button_title) || GlobalSetting.try(:saml_title)
 

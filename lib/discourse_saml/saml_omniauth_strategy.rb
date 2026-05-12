@@ -9,51 +9,26 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
     with_settings do |settings|
       authn_request = OneLogin::RubySaml::Authrequest.new
 
-      # Direct injection of AMA extensions
-      puts "AMA: Checking ama_enabled: #{::DiscourseSaml.setting(:ama_enabled)}"
+      # Enable the AMA patch for this specific request thread
       if ::DiscourseSaml.setting(:ama_enabled)
-        puts "AMA: authn_request class: #{authn_request.class}"
-        original_method = authn_request.method(:create_xml_doc)
-        authn_request.define_singleton_method(:create_xml_doc) do |settings, params|
-          msg = "AMA: Singleton create_xml_doc EXECUTING!"
-          puts msg
-          Rails.logger.warn(msg) if defined?(Rails)
-          doc = original_method.call(settings, params)
-          
-          fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-          root = doc.root
-          extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
-          
-          # Ensure correct order (after Issuer)
-          if root.elements["saml:Issuer"] && extensions.parent == root
-            # Already in root, but let's make sure it's after Issuer
-            issuer = root.elements["saml:Issuer"]
-            root.delete_element(extensions)
-            root.insert_after(issuer, extensions)
-          end
-
-          level = ::DiscourseSaml.setting(:ama_faaalevel) || "3"
-          extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
-          
-          req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-          (::DiscourseSaml.setting(:ama_requested_attributes) || "").split("|").map(&:strip).each do |attr_name|
-            next if attr_name.empty?
-            req_attrs.add_element("fa:RequestedAttribute", {
-              "Name" => attr_name,
-              "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-              "isRequired" => "False"
-            })
-          end
-          doc
-        end
+        Thread.current[:ama_saml_patch_enabled] = true
+        Thread.current[:ama_faaalevel] = ::DiscourseSaml.setting(:ama_faaalevel)
+        Thread.current[:ama_requested_attributes] = ::DiscourseSaml.setting(:ama_requested_attributes)
       end
 
-      if options[:request_method] == "POST"
-        params = authn_request.create_params(settings, additional_params_for_authn_request)
-        destination = settings.idp_sso_service_url
-        render_auto_submitted_form(destination: destination, params: params)
-      else
-        super
+      begin
+        if options[:request_method] == "POST"
+          params = authn_request.create_params(settings, additional_params_for_authn_request)
+          destination = settings.idp_sso_service_url
+          render_auto_submitted_form(destination: destination, params: params)
+        else
+          super
+        end
+      ensure
+        # Always disable the patch after the request to avoid side effects
+        Thread.current[:ama_saml_patch_enabled] = false
+        Thread.current[:ama_faaalevel] = nil
+        Thread.current[:ama_requested_attributes] = nil
       end
     end
   end
