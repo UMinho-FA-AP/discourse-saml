@@ -31,43 +31,47 @@ class Plugin::Instance
   end
 end
 
+# Define the patch module outside after_initialize for clarity
+module AmaAuthrequestPatch
+  def create_xml_doc(settings, params = {})
+    puts "AMA: create_xml_doc PREPENDed intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
+    doc = super(settings, params)
+    
+    if Thread.current[:ama_saml_patch_enabled]
+      puts "AMA: Global create_xml_doc patch EXECUTING!"
+      fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+      root = doc.root
+      extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
+      
+      if root.elements["saml:Issuer"] && extensions.parent == root
+        issuer = root.elements["saml:Issuer"]
+        root.delete_element(extensions)
+        root.insert_after(issuer, extensions)
+      end
+
+      level = Thread.current[:ama_faaalevel] || "3"
+      extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
+      
+      req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+      (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
+        next if attr_name.empty?
+        req_attrs.add_element("fa:RequestedAttribute", {
+          "Name" => attr_name,
+          "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+          "isRequired" => "False"
+        })
+      end
+    end
+    doc
+  end
+end
+
 after_initialize do
   require "onelogin/ruby-saml/authrequest"
   require "omniauth-saml"
 
-  class OneLogin::RubySaml::Authrequest
-    if (method_defined?(:create_xml_doc) || private_method_defined?(:create_xml_doc)) && !method_defined?(:original_create_xml_doc)
-      alias_method :original_create_xml_doc, :create_xml_doc
-
-      def create_xml_doc(settings, params = {})
-        puts "AMA: create_xml_doc intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
-        doc = original_create_xml_doc(settings, params)
-        if Thread.current[:ama_saml_patch_enabled]
-          puts "AMA: Global create_xml_doc patch EXECUTING!"
-          fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-          root = doc.root
-          extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
-          if root.elements["saml:Issuer"] && extensions.parent == root
-            issuer = root.elements["saml:Issuer"]
-            root.delete_element(extensions)
-            root.insert_after(issuer, extensions)
-          end
-          level = Thread.current[:ama_faaalevel] || "3"
-          extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
-          req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-          (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
-            next if attr_name.empty?
-            req_attrs.add_element("fa:RequestedAttribute", {
-              "Name" => attr_name,
-              "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-              "isRequired" => "False"
-            })
-          end
-        end
-        doc
-      end
-    end
-  end
+  # Apply the patch using prepend
+  OneLogin::RubySaml::Authrequest.prepend(AmaAuthrequestPatch)
 
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
   require_relative "lib/saml_authenticator"
