@@ -57,9 +57,9 @@ end
 # 2. Authenticator registration (Top Level)
 require_relative "lib/saml_authenticator"
 
-# Safe title resolution for the build phase
-title = GlobalSetting.try(:saml_title) || "SAML"
-button_title = GlobalSetting.try(:saml_button_title) || title
+# Use ENV directly to ensure settings are available during the build phase
+title = ENV["DISCOURSE_SAML_TITLE"] || "SAML"
+button_title = ENV["DISCOURSE_SAML_BUTTON_TITLE"] || title
 
 auth_provider icon_setting: :saml_icon,
               title: button_title,
