@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class SamlAuthenticator < ::Auth::ManagedAuthenticator
+  def initialize
+    puts "AMA: SamlAuthenticator initialized"
+    super
+  end
+
   def name
     "saml"
   end

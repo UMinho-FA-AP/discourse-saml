@@ -17,6 +17,11 @@ module DiscourseSaml
     # extensions block, otherwise it rejects the request with a generic error.
     #
     # Namespace: http://autenticacao.cartaodecidadao.pt/atributos
+    def create(settings, params = {})
+      puts "AMA: Authrequest#create called!"
+      super
+    end
+
     def create_xml_doc(settings, params = {})
       # Diagnostic log to confirm the method is being intercepted
       puts "AMA: create_xml_doc called! AMA Enabled: #{::DiscourseSaml.setting(:ama_enabled)}"
