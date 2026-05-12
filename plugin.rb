@@ -28,7 +28,7 @@ after_initialize do
   require "omniauth-saml"
 
   class OneLogin::RubySaml::Authrequest
-    unless method_defined?(:original_create_xml_doc)
+    if (method_defined?(:create_xml_doc) || private_method_defined?(:create_xml_doc)) && !method_defined?(:original_create_xml_doc)
       alias_method :original_create_xml_doc, :create_xml_doc
 
       def create_xml_doc(settings, params = {})
