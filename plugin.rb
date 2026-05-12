@@ -61,7 +61,8 @@ require_relative "lib/saml_authenticator"
 title = ENV["DISCOURSE_SAML_TITLE"] || "SAML"
 button_title = ENV["DISCOURSE_SAML_BUTTON_TITLE"] || title
 
-auth_provider icon_setting: :saml_icon,
+auth_provider name: "saml",
+              icon_setting: :saml_icon,
               title: button_title,
               pretty_name: title,
               authenticator: SamlAuthenticator.new
