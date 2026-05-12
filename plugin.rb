@@ -3,51 +3,49 @@
 # Discourse SAML Plugin for AMA (Autenticacao.gov)
 # Version: 1.1
 
-require "onelogin/ruby-saml/authrequest"
+after_initialize do
+  # By this point, all gems (including ruby-saml) are fully loaded
+  class OneLogin::RubySaml::Authrequest
+    unless method_defined?(:original_create_xml_doc)
+      alias_method :original_create_xml_doc, :create_xml_doc
 
-# Global patch with thread-local scoping for maximum reliability
-class OneLogin::RubySaml::Authrequest
-  unless method_defined?(:original_create_xml_doc)
-    alias_method :original_create_xml_doc, :create_xml_doc
+      def create_xml_doc(settings, params = {})
+        doc = original_create_xml_doc(settings, params)
 
-    def create_xml_doc(settings, params = {})
-      doc = original_create_xml_doc(settings, params)
+        # Only apply AMA modifications if explicitly enabled for this thread
+        if Thread.current[:ama_saml_patch_enabled]
+          puts "AMA: Global create_xml_doc patch EXECUTING!"
+          
+          fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+          root = doc.root
+          extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
+          
+          # Ensure correct order (after Issuer)
+          if root.elements["saml:Issuer"] && extensions.parent == root
+            issuer = root.elements["saml:Issuer"]
+            root.delete_element(extensions)
+            root.insert_after(issuer, extensions)
+          end
 
-      # Only apply AMA modifications if explicitly enabled for this thread
-      if Thread.current[:ama_saml_patch_enabled]
-        puts "AMA: Global create_xml_doc patch EXECUTING!"
-        
-        fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-        root = doc.root
-        extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
-        
-        # Ensure correct order (after Issuer)
-        if root.elements["saml:Issuer"] && extensions.parent == root
-          issuer = root.elements["saml:Issuer"]
-          root.delete_element(extensions)
-          root.insert_after(issuer, extensions)
+          level = Thread.current[:ama_faaalevel] || "3"
+          extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
+          
+          req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+          (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
+            next if attr_name.empty?
+            req_attrs.add_element("fa:RequestedAttribute", {
+              "Name" => attr_name,
+              "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+              "isRequired" => "False"
+            })
+          end
         end
-
-        level = Thread.current[:ama_faaalevel] || "3"
-        extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
         
-        req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-        (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).each do |attr_name|
-          next if attr_name.empty?
-          req_attrs.add_element("fa:RequestedAttribute", {
-            "Name" => attr_name,
-            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-            "isRequired" => "False"
-          })
-        end
+        doc
       end
-      
-      doc
     end
   end
-end
 
-after_initialize do
   module ::DiscourseSaml::SessionControllerExtensions
     def login_error_check(user)
       if ::DiscourseSaml.is_saml_forced_domain?(user.email)
