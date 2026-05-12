@@ -83,7 +83,7 @@ module AmaAuthrequestPatch
       end
 
       # 3. Re-encode and compress the modified XML
-      new_xml = ""
+      new_xml = String.new
       doc.write(new_xml)
       
       puts "AMA: Deflating..."
