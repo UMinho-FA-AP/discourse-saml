@@ -59,4 +59,15 @@ describe DiscourseSaml::AmaAuthnrequestExtension do
     expect(xml.scan('<samlp:Extensions>').length).to eq(1)
     expect(xml.scan('fa:FAAALevel').length).to eq(1)
   end
+
+  it "inserts Extensions in the correct order (before NameIDPolicy)" do
+    # Configure settings that trigger other elements like NameIDPolicy
+    settings.name_identifier_format = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+    
+    doc = auth_request.create_xml_doc(settings)
+    xml = doc.to_s
+    
+    # Extensions must appear before NameIDPolicy
+    expect(xml.index('<samlp:Extensions>')).to be < xml.index('<samlp:NameIDPolicy')
+  end
 end

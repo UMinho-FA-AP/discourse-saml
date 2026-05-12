@@ -17,11 +17,29 @@ module DiscourseSaml
       return doc unless ::DiscourseSaml.setting(:ama_enabled)
 
       fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-
       root = doc.root
       
-      # samlp namespace is defined by ruby-saml as urn:oasis:names:tc:SAML:2.0:protocol
-      extensions = root.elements["samlp:Extensions"] || root.add_element("samlp:Extensions")
+      # SAML 2.0 schema requires samlp:Extensions to be after saml:Issuer and before 
+      # samlp:Subject, samlp:NameIDPolicy, etc. 
+      # ruby-saml's default #add_element appends to the end, which breaks schema validation.
+      extensions = root.elements["samlp:Extensions"]
+      
+      unless extensions
+        # Identify the first element that should come AFTER Extensions
+        # Reference: https://www.oasis-open.org/committees/download.php/11511/sstc-saml-schema-protocol-2.0.xsd
+        following_element = root.elements["samlp:Subject"] || 
+                            root.elements["samlp:NameIDPolicy"] || 
+                            root.elements["samlp:Conditions"] ||
+                            root.elements["samlp:RequestedAuthnContext"] ||
+                            root.elements["samlp:Scoping"]
+        
+        if following_element
+          extensions = REXML::Element.new("samlp:Extensions")
+          root.insert_before(following_element, extensions)
+        else
+          extensions = root.add_element("samlp:Extensions")
+        end
+      end
 
       # Add FAAALevel
       # Level 3 is typically required for Chave Móvel Digital / Citizen Card authentication.
