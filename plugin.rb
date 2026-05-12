@@ -16,85 +16,103 @@ module ::DiscourseSaml
   end
 end
 
-# Utility module for AMA XML injection logic
-module AmaXmlExtension
-  def self.apply!(doc)
-    return unless Thread.current[:ama_saml_patch_enabled]
-    
-    require "rexml/document"
-    fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
-    root = doc.root
-    
-    # Don't apply twice if already present with our level
-    return if root.elements["samlp:Extensions"] && root.elements["samlp:Extensions"].elements["fa:FAAALevel"]
-
-    # 1. Ensure Extensions exist
-    extensions = root.elements["samlp:Extensions"] || REXML::Element.new("samlp:Extensions")
-    
-    # 2. Position correctly: Standard order is Issuer, Signature, Extensions
-    signature = root.elements["ds:Signature"]
-    issuer = root.elements["saml:Issuer"]
-    
-    if signature
-      # If signature exists, put extensions AFTER it as per AMA example
-      root.insert_after(signature, extensions)
-    elsif issuer
-      # Otherwise put after issuer
-      root.insert_after(issuer, extensions)
-    else
-      # Fallback to end of root
-      root.add_element(extensions) unless extensions.parent
-    end
-
-    # 3. Add/Update FAAALevel
-    faaalevel = extensions.elements["fa:FAAALevel"] || extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns })
-    faaalevel.text = (Thread.current[:ama_faaalevel] || "3").to_s
-    
-    # 4. Add/Update RequestedAttributes
-    req_attrs = extensions.elements["fa:RequestedAttributes"] || extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
-    
-    existing_names = req_attrs.get_elements("fa:RequestedAttribute").map { |el| el.attributes["Name"] }
-    (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).reject(&:empty?).each do |attr_name|
-      next if existing_names.include?(attr_name)
-      req_attrs.add_element("fa:RequestedAttribute", {
-        "Name" => attr_name,
-        "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-        "isRequired" => "False"
-      })
-    end
-  end
-end
-
-# Patch 1: The Signing Utility
-# This ensures extensions are added BEFORE the XML is signed
-module AmaSignPatch
-  def add_sign(doc, *args)
-    AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
-    super(doc, *args)
-  end
-end
-
-# Patch 2: The Authrequest Class
-# This ensures extensions are added even if the request is NOT signed
 module AmaAuthrequestPatch
-  def create_xml_doc(settings, params = {})
-    doc = super(settings, params)
-    AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
-    doc
+  def create_params(settings, params = {})
+    puts "AMA: create_params intercepting! Patch enabled: #{Thread.current[:ama_saml_patch_enabled].inspect}"
+    
+    result = super(settings, params)
+    
+    if Thread.current[:ama_saml_patch_enabled] && result["SAMLRequest"]
+      require "rexml/document"
+      require "base64"
+      require "zlib"
+      
+      puts "AMA: Decoding SAMLRequest for extension injection..."
+      
+      # Detect if it is deflated (standard for GET/Redirect) or raw (standard for POST)
+      begin
+        decoded = Base64.decode64(result["SAMLRequest"])
+        begin
+          # Try inflating
+          inflated = Zlib::Inflate.new(-Zlib::MAX_WBITS).inflate(decoded)
+          is_deflated = true
+        rescue
+          # If inflation fails, it might be raw XML
+          inflated = decoded
+          is_deflated = false
+        end
+        
+        doc = REXML::Document.new(inflated)
+        root = doc.root
+        fa_ns = "http://autenticacao.cartaodecidadao.pt/atributos"
+        
+        # Don't apply twice
+        if root.elements["//fa:FAAALevel"]
+          puts "AMA: Extensions already present, skipping."
+          return result
+        end
+
+        puts "AMA: Injecting extensions (is_deflated: #{is_deflated})"
+        
+        extensions = root.elements["samlp:Extensions"] || REXML::Element.new("samlp:Extensions")
+        
+        # Position correctly: After Signature if present, else after Issuer
+        signature = root.elements["//ds:Signature"]
+        issuer = root.elements["//saml:Issuer"]
+        
+        if signature
+          puts "AMA: Signature found, placing extensions after it."
+          root.insert_after(signature, extensions)
+        elsif issuer
+          puts "AMA: No signature, placing extensions after issuer."
+          root.insert_after(issuer, extensions)
+        else
+          root.add_element(extensions)
+        end
+
+        # Add AMA fields
+        level = Thread.current[:ama_faaalevel] || "3"
+        extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
+        req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+        (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).reject(&:empty?).each do |attr_name|
+          req_attrs.add_element("fa:RequestedAttribute", {
+            "Name" => attr_name,
+            "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+            "isRequired" => "False"
+          })
+        end
+
+        # Re-encode
+        new_xml = String.new
+        doc.write(new_xml)
+        
+        if is_deflated
+          deflated = Zlib::Deflate.new(nil, -Zlib::MAX_WBITS).deflate(new_xml, Zlib::FINISH)
+          result["SAMLRequest"] = Base64.strict_encode64(deflated)
+        else
+          result["SAMLRequest"] = Base64.strict_encode64(new_xml)
+        end
+        puts "AMA: SAMLRequest successfully patched."
+        
+      rescue => e
+        puts "AMA: ERROR during injection: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+      end
+    end
+    
+    result
   end
 end
 
 after_initialize do
   require "onelogin/ruby-saml/authrequest"
-  require "onelogin/ruby-saml/utils"
   require "omniauth-saml"
 
-  # Apply both patches to ensure extensions are added correctly in all flows
-  OneLogin::RubySaml::Utils.singleton_class.prepend(AmaSignPatch)
   OneLogin::RubySaml::Authrequest.prepend(AmaAuthrequestPatch)
 
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
   require_relative "lib/saml_authenticator"
+  
+  puts "AMA: SamlAuthenticator components loaded"
 end
 
 require_relative "lib/saml_authenticator"
