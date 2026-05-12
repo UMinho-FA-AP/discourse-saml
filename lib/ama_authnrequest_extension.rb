@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "onelogin/ruby-saml/authrequest"
 
 # This WILL show up in stdout during startup
 puts "AMA: Loading Autenticacao.gov extension patch..."
