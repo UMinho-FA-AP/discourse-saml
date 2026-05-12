@@ -9,7 +9,7 @@ gem "ruby-saml", "1.18.0"
 gem "omniauth-saml", "2.2.3"
 
 module ::DiscourseSaml
-  def self.setting(key)
+  def self.setting(key, default = nil)
     SiteSetting.send("saml_#{key}")
   rescue NoMethodError
     GlobalSetting.try("saml_#{key}")
