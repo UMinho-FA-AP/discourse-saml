@@ -11,8 +11,8 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
 
       # Direct injection of AMA extensions
       if ::DiscourseSaml.setting(:ama_enabled)
-        puts "AMA: Injecting extensions into AuthnRequest instance"
-        authn_request.extend(DiscourseSaml::AmaAuthnrequestExtension)
+        puts "AMA: Prepending extensions to AuthnRequest singleton class"
+        authn_request.singleton_class.prepend(DiscourseSaml::AmaAuthnrequestExtension)
       end
 
       if options[:request_method] == "POST"
