@@ -7,6 +7,8 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
     with_settings do |settings|
       puts "AMA: Authrequest class: #{OneLogin::RubySaml::Authrequest}"
       puts "AMA: Authrequest ancestors: #{OneLogin::RubySaml::Authrequest.ancestors.first(10)}"
+      puts "AMA: create_xml_doc owner: #{OneLogin::RubySaml::Authrequest.instance_method(:create_xml_doc).owner rescue 'NOT FOUND (Public)'}"
+      puts "AMA: create_xml_doc private owner: #{OneLogin::RubySaml::Authrequest.private_instance_method(:create_xml_doc).owner rescue 'NOT FOUND (Private)'}"
       authn_request = OneLogin::RubySaml::Authrequest.new
 
       # Enable the AMA patch for this specific request thread
