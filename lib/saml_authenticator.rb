@@ -82,8 +82,8 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
         want_assertions_signed: !!setting(:want_assertions_signed),
         logout_requests_signed: !!setting(:logout_requests_signed),
         logout_responses_signed: !!setting(:logout_responses_signed),
-        signature_method: setting(:ama_enabled) ? "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" : "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
-        digest_method: setting(:ama_enabled) ? "http://www.w3.org/2001/04/xmlenc#sha256" : "http://www.w3.org/2000/09/xmldsig#sha1",
+        signature_method: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+        digest_method: "http://www.w3.org/2000/09/xmldsig#sha1",
       },
       idp_slo_session_destroy:
         proc do |env, session|
