@@ -37,28 +37,33 @@ module AmaXmlExtension
     end
 
     # 1. Ensure Extensions exist
-    extensions = root.elements["//*[local-name()='Extensions']"] || REXML::Element.new("samlp:Extensions")
-    
-    # 2. Position: After Issuer (Signature will be added by the library later)
-    issuer = root.elements["//*[local-name()='Issuer']"]
-    if issuer
-      puts "AMA: Found Issuer, inserting extensions after it."
-      root.insert_after(issuer, extensions)
-    else
-      puts "AMA: No Issuer found, adding extensions to root."
-      root.add_element(extensions)
+    extensions = root.elements["samlp:Extensions"] || root.elements["Extensions"]
+    unless extensions
+      extensions = REXML::Element.new("samlp:Extensions")
+      # Position: After Issuer (Signature will be added by the library later)
+      issuer = root.elements["saml:Issuer"] || root.elements["Issuer"]
+      if issuer
+        puts "AMA: Found Issuer, inserting extensions after it."
+        root.insert_after(issuer, extensions)
+      else
+        puts "AMA: No Issuer found, adding extensions to root."
+        root.add_element(extensions)
+      end
     end
+
+    # 2. Set namespace declaration once on the Extensions element
+    extensions.add_namespace("fa", fa_ns)
 
     # 3. Add AMA fields
     puts "AMA: Adding FAAALevel and RequestedAttributes..."
     level = Thread.current[:ama_faaalevel] || "3"
-    extensions.add_element("fa:FAAALevel", { "xmlns:fa" => fa_ns }).text = level.to_s
-    req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
+    extensions.add_element("fa:FAAALevel").text = level.to_s
+    req_attrs = extensions.add_element("fa:RequestedAttributes")
     (Thread.current[:ama_requested_attributes] || "").split("|").map(&:strip).reject(&:empty?).each do |attr_name|
       req_attrs.add_element("fa:RequestedAttribute", {
         "Name" => attr_name,
         "NameFormat" => "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
-        "isRequired" => "False"
+        "isRequired" => "false"
       })
     end
     puts "AMA: apply! completed successfully."
