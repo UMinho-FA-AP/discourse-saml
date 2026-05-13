@@ -36,6 +36,13 @@ module AmaXmlExtension
       return
     end
 
+    # Add mandatory AMA attributes to the root AuthnRequest element
+    puts "AMA: Adding root AuthnRequest attributes (ForceAuthn, IsPassive, ProtocolBinding, ProviderName)..."
+    root.attributes["ForceAuthn"] = "true"
+    root.attributes["IsPassive"] = "false"
+    root.attributes["ProtocolBinding"] = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+    root.attributes["ProviderName"] = ENV["DISCOURSE_SAML_TITLE"] || "SAML"
+
     # 1. Ensure Extensions exist
     extensions = root.elements["samlp:Extensions"] || root.elements["Extensions"]
     unless extensions
