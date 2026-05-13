@@ -67,20 +67,11 @@ module AmaXmlExtension
   end
 end
 
-# Patch 1: The Signing Utility
-module AmaSignPatch
-  def add_sign(doc, *args)
-    puts "AMA: OneLogin::RubySaml::Utils.add_sign INTERCEPTED"
-    AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
-    super(doc, *args)
-  end
-end
-
-# Patch 2: The Authrequest Class
+# Patch module for AMA Extensions support
 module AmaAuthrequestPatch
-  def create_xml_doc(settings, params = {})
-    puts "AMA: OneLogin::RubySaml::Authrequest#create_xml_doc INTERCEPTED"
-    doc = super(settings, params)
+  def create_xml_document(settings, *args)
+    puts "AMA: OneLogin::RubySaml::Authrequest#create_xml_document INTERCEPTED"
+    doc = super(settings, *args)
     AmaXmlExtension.apply!(doc) if Thread.current[:ama_saml_patch_enabled]
     doc
   end
@@ -88,11 +79,9 @@ end
 
 after_initialize do
   require "onelogin/ruby-saml/authrequest"
-  require "onelogin/ruby-saml/utils"
   require "omniauth-saml"
 
-  puts "AMA: Applying patches..."
-  OneLogin::RubySaml::Utils.singleton_class.prepend(AmaSignPatch)
+  puts "AMA: Applying AmaAuthrequestPatch to OneLogin::RubySaml::Authrequest..."
   OneLogin::RubySaml::Authrequest.prepend(AmaAuthrequestPatch)
 
   require_relative "lib/discourse_saml/saml_omniauth_strategy"
