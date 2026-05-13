@@ -5,6 +5,8 @@ class ::DiscourseSaml::SamlOmniauthStrategy < OmniAuth::Strategies::SAML
 
   def request_phase
     with_settings do |settings|
+      puts "AMA: Authrequest class: #{OneLogin::RubySaml::Authrequest}"
+      puts "AMA: Authrequest ancestors: #{OneLogin::RubySaml::Authrequest.ancestors.first(10)}"
       authn_request = OneLogin::RubySaml::Authrequest.new
 
       # Enable the AMA patch for this specific request thread
