@@ -189,5 +189,5 @@ saml:
     area: "saml"
   saml_ama_requested_attributes:
     type: list
-    default: "http://interop.gov.pt/MDC/Cidadao/NIC|http://interop.gov.pt/MDC/Cidadao/NomeProprio"
+    default: ""
     area: "saml"

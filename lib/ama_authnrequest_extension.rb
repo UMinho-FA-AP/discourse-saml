@@ -69,7 +69,7 @@ module DiscourseSaml
       unless extensions.elements["fa:RequestedAttributes"]
         req_attrs = extensions.add_element("fa:RequestedAttributes", { "xmlns:fa" => fa_ns })
         
-        attributes_string = ::DiscourseSaml.setting(:request_attributes).presence || ::DiscourseSaml.setting(:ama_requested_attributes) || ""
+        attributes_string = ::DiscourseSaml.setting(:ama_requested_attributes).presence || ::DiscourseSaml.setting(:request_attributes).presence || "http://interop.gov.pt/MDC/Cidadao/NIC|http://interop.gov.pt/MDC/Cidadao/NomeCompleto"
         attributes = attributes_string.split("|").map(&:strip).reject(&:blank?)
         attributes.each do |attr_name|
           req_attrs.add_element("fa:RequestedAttribute", {
