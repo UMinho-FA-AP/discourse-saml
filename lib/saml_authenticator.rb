@@ -78,6 +78,7 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
       private_key: setting(:sp_private_key).presence,
       idp_sso_service_binding: (setting(:request_method)&.downcase == "post") ? :post : :redirect,
       compress_request: !setting(:ama_enabled),
+      skip_recipient_check: true,
       security: {
         authn_requests_signed: !!setting(:authn_requests_signed),
         want_assertions_signed: !!setting(:want_assertions_signed),
@@ -85,6 +86,7 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
         logout_responses_signed: !!setting(:logout_responses_signed),
         signature_method: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
         digest_method: "http://www.w3.org/2000/09/xmldsig#sha1",
+        skip_recipient_check: true,
       },
       idp_slo_session_destroy:
         proc do |env, session|
