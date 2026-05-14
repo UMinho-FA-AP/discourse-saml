@@ -39,13 +39,13 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
   def attribute_statements
     result = Hash.new { |h, k| h[k] = [] }
 
-    setting(:attribute_statements)
-      .split("|")
-      .each do |statement|
-        attrs = statement.split(":")
-        next if attrs.size != 2 || attrs[0].blank? || attrs[1].blank?
-        result[attrs[0].strip] |= attrs[1].split(",").compact_blank.map(&:strip)
-      end
+    statements = setting(:attribute_statements).to_s
+    list = statements.include?("|") ? statements.split("|") : statements.split(",")
+    list.each do |statement|
+      attrs = statement.split(":", 2)
+      next if attrs.size != 2 || attrs[0].blank? || attrs[1].blank?
+      result[attrs[0].strip] |= [attrs[1].strip]
+    end
 
     DEFAULT_ATTRIBUTES.each { |key, defaults| result[key] |= defaults }
 
@@ -299,17 +299,19 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
   end
 
   def sync_user_fields(user, attributes, info)
-    statements = setting(:user_field_statements) || ""
+    statements = setting(:custom_profile_fields).presence || setting(:user_field_statements).presence || ""
+    list = statements.include?("|") ? statements.split("|") : statements.split(",")
 
-    statements
-      .split("|")
-      .each do |statement|
-        key, field_id = statement.split(":")
-        next if key.blank? || field_id.blank?
+    list.each do |statement|
+      field_name, attr_name = statement.split(":", 2)
+      next if field_name.blank? || attr_name.blank?
 
-        val = info[key] || attributes.multi(key)&.join(",")
-        user.custom_fields["user_field_#{field_id}"] = val if val.present?
+      val = info[attr_name.strip] || attributes.multi(attr_name.strip)&.join(",")
+      if val.present?
+        target_field = field_name.strip.start_with?("user_field_") ? field_name.strip : "user_field_#{field_name.strip}"
+        user.custom_fields[target_field] = val
       end
+    end
   end
 
   def sync_moderator(user, attributes)
