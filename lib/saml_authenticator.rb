@@ -125,7 +125,12 @@ class AmaSamlAuthenticator < ::Auth::ManagedAuthenticator
       attributes = OneLogin::RubySaml::Attributes.new(attributes.to_h)
     end
 
-    auth[:uid] = attributes.single("uid") || auth[:uid] if setting(:use_attributes_uid)
+    if setting(:ama_enabled)
+      nic = attributes.single("http://interop.gov.pt/MDC/Cidadao/NIC")
+      auth[:uid] = nic if nic.present?
+    elsif setting(:use_attributes_uid)
+      auth[:uid] = attributes.single("uid") || auth[:uid]
+    end
     uid = auth[:uid]
     previous_attributes =
       UserAssociatedAccount.find_by(provider_name: name, provider_uid: uid)&.extra
